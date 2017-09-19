@@ -4,6 +4,7 @@
   "description": "Sync Service",
   "main": "index.js",
   "scripts": {
+    "build": "babel src -d lib -s",
     "test": "node app.js"
   },
   "author": "CodeMeow5",
@@ -18,5 +19,8 @@
     "koa-better-body": "^3.0.4",
     "koa-router": "^7.2.1",
     "redis": "^2.8.0"
+  },
+  "devDependencies": {
+    "babel-cli": "^6.26.0"
   }
 }

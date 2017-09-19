@@ -1,5 +1,3 @@
-require('babel-register');
-
 const SyncPoint = require('./index');
 
 var opts = {
