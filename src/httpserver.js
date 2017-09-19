@@ -90,6 +90,10 @@ export default class HttpServer{
         } else if(node == undefined || scope.length == 0){
             ctx.throw(401);
         }
+
+        // disable timeout
+        ctx.req.setTimeout(0);
+
         let longPolling = this.longPollings[scope];
         if(longPolling != undefined){
             longPolling.destroy();
