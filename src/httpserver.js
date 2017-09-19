@@ -15,7 +15,6 @@ export default class HttpServer{
         }
         this.options = options;
         this.longPollings = {};
-        this.scopePool = {};
         this.httpPack = new HttpPack(options);
         this.server = new Koa();
         this.router = new Router();
@@ -48,22 +47,26 @@ export default class HttpServer{
             "newNumberOfSegment": number
         };
         let respondBody = JSON.stringify(notifyData);
-        let scopes = this.livingNodes(uid);
+        let scopes = this.scopesForUser(uid);
         _.forEach(scopes, function(scope){
-            this.httpPack.commit(scope, new Buffer(respondBody, 'utf-8'), 1);
+            this.httpPack.commit(scope, new Buffer(respondBody, 'utf-8'), 0);
         }.bind(this));
     }
 
-    livingNodes(uid){
-        let nodes = this.scopePool[uid];
-        if(nodes == undefined){
-            nodes = {};
-            this.scopePool[username] = nodes;
+    scopesForUser(uid){
+        let longPollingsForUser = this.longPollings[uid];
+        if(longPollingsForUser == undefined){
+            longPollingsForUser = {};
+            this.longPollings[uid] = longPollingsForUser;
         }
-        nodes = _.keys(nodes);
-        return _.map(nodes, function(node){
-            return `${uid}:${node}`;
+        let longPollings = _.values(longPollingsForUser);
+        longPollings = _.filter(longPollings, function(lp){
+            return !lp.isDestroyed;
         });
+        let scopes = _.map(longPollings, function(lp){
+            return lp.scope;
+        });
+        return scopes;
     }
 
     authenticate(ctx){
@@ -71,44 +74,46 @@ export default class HttpServer{
         if(scope == undefined || scope.length == 0){
             return [scope, null, null];
         }
-        let [username, node] = scope.split(':');
-        let nodes = this.scopePool[username];
-        if(nodes == undefined){
-            nodes = {};
-            this.scopePool[username] = nodes;
+        let index = scope.indexOf(':');
+        if(index == -1){
+            ctx.throw(401);
         }
-        nodes[node] = true;
+        let username = scope.substr(0, index);
+        let node = scope.substr(index + 1);
+        if(scope == undefined || scope.length == 0){
+            ctx.throw(401);
+        } else if(username == undefined || username.length == 0){
+            ctx.throw(401);
+        } else if(node == undefined || node.length == 0){
+            ctx.throw(401);
+        }
         return [scope, username, node];
     }
 
     outgoingHandle(ctx, next){
         let [scope, uid, node] = this.authenticate(ctx);
-        if(scope == undefined || scope.length == 0){
-            ctx.throw(401);
-        } else if(uid == undefined || scope.length == 0){
-            ctx.throw(401);
-        } else if(node == undefined || scope.length == 0){
-            ctx.throw(401);
-        }
 
         // disable timeout
         ctx.req.setTimeout(0);
 
-        let longPolling = this.longPollings[scope];
+        let longPollingsForUser = this.longPollings[uid];
+        if(longPollingsForUser == undefined){
+            longPollingsForUser = {};
+            this.longPollings[uid] = longPollingsForUser;
+        }
+        let longPolling = longPollingsForUser[node];
         if(longPolling != undefined){
-            longPolling.destroy();
+            longPolling.stop();
         }
         longPolling = new LongPolling(this.httpPack, scope);
-        this.longPollings[scope] = longPolling;
+        longPollingsForUser[node] = longPolling;
         longPolling.start(ctx);
         return next();
     }
 
     incomingHandle(ctx, next){
         let [scope, uid, node] = this.authenticate(ctx);
-        if(scope == undefined || scope.length == 0){
-            ctx.throw(401);
-        }
+
         return ctx.request.buffer().then(function(body){
             return this.httpPack.parseBody(scope, body, function(scope, payload){
                 let syncData = JSON.parse(payload);
