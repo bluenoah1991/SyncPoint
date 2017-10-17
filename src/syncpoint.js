@@ -60,7 +60,7 @@ export default class SyncPoint{
                             this.notifyNewNumberOfSegment(uid, numberOfNextSegment);
                             return {
                                 "id": ++syncId,
-                                "points": conflictsPoints,
+                                "points": serverPoints.concat(conflictsPoints),
                                 "numberOfSegment": numberOfNextSegment
                             };
                         }.bind(this));
